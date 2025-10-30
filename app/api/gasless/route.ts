@@ -3,12 +3,9 @@ import {
   Connection,
   Keypair,
   Transaction,
-  sendAndConfirmTransaction,
-  PublicKey,
 } from "@solana/web3.js";
 import bs58 from "bs58";
 
-const DEVNET_RPC = "https://api.devnet.solana.com";
 
 export async function POST(req: NextRequest) {
   try {
@@ -32,6 +29,15 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
+    // get rpc from env
+    const rpc = process.env.RPC;
+    if (!rpc) {
+      console.error("RPC not set in environment variables");
+      return NextResponse.json(
+        { error: "Server configuration error" },
+        { status: 500 }
+      );
+    }
 
     // Create fee payer keypair from private key
     let feePayerKeypair: Keypair;
@@ -49,7 +55,8 @@ export async function POST(req: NextRequest) {
     // Deserialize the transaction
     const transactionBuffer = Buffer.from(serializedTxArray);
     const transaction = Transaction.from(transactionBuffer);
-
+    
+    // set fee payer
     transaction.feePayer = feePayerKeypair.publicKey;
 
     // Update blockhash if provided
@@ -74,10 +81,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-
-
     // Create connection
-    const connection = new Connection(DEVNET_RPC, "confirmed");
+    const connection = new Connection(rpc, "confirmed");
 
     // Verify fee payer has enough SOL for fees
     const balance = await connection.getBalance(feePayerKeypair.publicKey);

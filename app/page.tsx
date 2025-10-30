@@ -1,34 +1,48 @@
-
-
 "use client"
 
-import React, { useState } from "react";
-import { BsInfoCircle } from "react-icons/bs";
+import React, { useEffect, useState } from "react";
 import * as web3 from "@solana/web3.js";
-import { AnchorProvider } from "@project-serum/anchor";
 
-import dynamic from "next/dynamic";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { Transaction } from "@solana/web3.js";
 import { createAssociatedTokenAccountInstruction, getAssociatedTokenAddress, createTransferInstruction } from "@solana/spl-token";
-const Home: React.FC = () => {
+import { WalletMultiButton } from "@/src/components/ConnectWalletBtn";
 
-  const { publicKey: address, wallet,signTransaction } = useWallet();
-  const token = new web3.PublicKey("DtQSKSJB4oNYKg3doEjAkkT1C7sPqJp6vaPs68KGEm1j")
-  const DEVNET_RPC = "https://api.devnet.solana.com";
-  const connectionID = new web3.Connection(DEVNET_RPC, "confirmed");
+const Home: React.FC = () => {
+  if(!process.env.NEXT_PUBLIC_TOKEN_MINT || !process.env.NEXT_PUBLIC_FEE_PAYER_ADDRESS){
+   return <div>Env not configured</div>
+  }
+  const token_mint = new web3.PublicKey(process.env.NEXT_PUBLIC_TOKEN_MINT)
+  const fee_payer = new web3.PublicKey(process.env.NEXT_PUBLIC_FEE_PAYER_ADDRESS)
+  const { publicKey, signTransaction } = useWallet();
+  const {connection} = useConnection()
 
   // State for form inputs
   const [recipient, setRecipient] = useState("");
   const [amount, setAmount] = useState("");
+  const [tokenBalance, setTokenBalance] = useState("0");
+  const [decimals, setDecimals] = useState(9);
   const [loading, setLoading] = useState(false);
   const [txSignature, setTxSignature] = useState("");
   const [error, setError] = useState("");
 
-
+  useEffect(()=>{
+    async function fetchUserTokenBalanceAndDecimals() {
+      if(publicKey && token_mint && connection){
+      const data = await connection.getParsedTokenAccountsByOwner(publicKey!,{mint:token_mint})
+      setTokenBalance(data.value?.[0]?.account?.data?.parsed?.info?.tokenAmount?.uiAmount)
+      setDecimals(data.value?.[0]?.account?.data?.parsed?.info?.tokenAmount?.decimals)
+      }
+    }
+    fetchUserTokenBalanceAndDecimals()
+  },[publicKey,txSignature])
 
   const createTransferSPL = async () => {
-    if (!address || !signTransaction) {
+    if(amount > tokenBalance){
+      setError("Insufficient token balance")
+      return
+    }
+    if (!publicKey || !signTransaction) {
       setError("Please connect your wallet first");
       return;
     }
@@ -53,18 +67,18 @@ const Home: React.FC = () => {
 
       // Get sender's token account
       const senderTokenAccount = await getAssociatedTokenAddress(
-        token,
-        address
+        token_mint,
+        publicKey
       );
 
       // Get recipient's token account
       const recipientTokenAccount = await getAssociatedTokenAddress(
-        token,
+        token_mint,
         recipientPubkey
       );
 
       // Check if recipient token account exists
-      const recipientAccountInfo = await connectionID.getAccountInfo(recipientTokenAccount);
+      const recipientAccountInfo = await connection.getAccountInfo(recipientTokenAccount);
 
       // Create transaction
       const transaction = new Transaction();
@@ -72,32 +86,31 @@ const Home: React.FC = () => {
       // If recipient token account doesn't exist, create it
       if (!recipientAccountInfo) {
         const createATAInstruction = createAssociatedTokenAccountInstruction(
-          address, // payer (user will sign, but fee payer will actually pay)
+          fee_payer, // payer (user will sign, but fee payer will actually pay)
           recipientTokenAccount,
           recipientPubkey,
-          token
+          token_mint
         );
         transaction.add(createATAInstruction);
       }
-
       // Add SPL token transfer instruction
-      // Convert amount to smallest unit (assuming 9 decimals for this token)
-      const amountInSmallestUnit = parseFloat(amount) * Math.pow(10, 6);
+      // Convert amount to smallest unit (assuming 6 decimals for this token)
+      const amountInSmallestUnit = parseFloat(amount) * Math.pow(10, decimals);
 
       const transferInstruction = createTransferInstruction(
         senderTokenAccount,    // source
         recipientTokenAccount, // destination
-        address,              // owner of source account
+        publicKey,              // owner of source account
         amountInSmallestUnit  // amount in smallest unit
       );
 
       transaction.add(transferInstruction);
 
       // Get recent blockhash
-      const { blockhash, lastValidBlockHeight } = await connectionID.getLatestBlockhash();
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
       transaction.recentBlockhash = blockhash;
       transaction.lastValidBlockHeight = lastValidBlockHeight;
-      transaction.feePayer = new web3.PublicKey("CrepGjpjjaHiXEPhEw2rLywEtjgR9sRvL3LfUrPQq9im");
+      transaction.feePayer = new web3.PublicKey(fee_payer);
 
       // User signs the transaction
       const signedTransaction = await signTransaction(transaction)
@@ -138,16 +151,6 @@ const Home: React.FC = () => {
     }
   }
 
-
-
- 
-  const WalletMultiButton = dynamic(
-    () =>
-      import("@solana/wallet-adapter-react-ui").then(
-        (mod) => mod.WalletMultiButton
-      ),
-    { ssr: false }
-  );
   return (
     <main className="">
       <div className="container">
@@ -156,14 +159,16 @@ const Home: React.FC = () => {
         </h4>
         <div className="max-w-[540px] max-sm:bg-primary max-sm:rounded-[10px] max-sm:border-2 max-sm:border-black  w-full mx-auto relative  py-10 max-[500px]:py-4 max-[500px]:px-6 ps-8 pr-9">
 
-          <WalletMultiButton />
+           <p className="font-semibold text-base flex items-center gap-2">
+              Wallet:
+              <WalletMultiButton />
+              </p>
 
           {/* recipient address */}
           <div className="mt-5">
             <div>
               <p className="font-semibold text-base flex items-center gap-2">
                 Recipient Address:
-                <BsInfoCircle className="text-white/70 text-lg" />
               </p>
             </div>
             <input
@@ -174,13 +179,16 @@ const Home: React.FC = () => {
               className="bg-Secondry mt-3 raffle-input outline-none border placeholder:text-[#FFFFFF4D] border-black rounded-[10px] h-[62px] px-5 w-full"
             />
           </div>
+          <div>
+            <span>Token Balance:</span>
+            <span>{tokenBalance}</span>
+          </div>
 
           {/* amount  */}
           <div className="mt-5">
             <div>
               <p className="font-semibold text-base flex items-center gap-2">
                 Amount:
-                <BsInfoCircle className="text-white/70 text-lg" />
               </p>
             </div>
             <input

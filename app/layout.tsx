@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
 import { Exo, Galindo } from "next/font/google";
 import "./globals.css";
-// import AppKitProvider from "@/src/components/appkit";
-import WalletContextProvider from "@/src/components/WalletProvider";
-import { Toaster } from "react-hot-toast";
+import WalletContextProvider from "@/src/providers/WalletProvider";
 
 const exo = Exo({ subsets: ["latin"] });
 
@@ -14,8 +12,8 @@ const galindo = Galindo({
 });
 
 export const metadata: Metadata = {
-  title: "",
-  description: "",
+  title: "GasLess SPL token Transfer",
+  description: "GasLess SPL token Transfer",
 };
 
 export default function RootLayout({
@@ -27,7 +25,6 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${exo.className} ${galindo.variable}`}>
         <WalletContextProvider>
-          <Toaster />
           {children}
         </WalletContextProvider>
 
