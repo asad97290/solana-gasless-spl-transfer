@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: AdLib;
+  src: url(/fonts/adlibbt_regular.ttf);
+}
